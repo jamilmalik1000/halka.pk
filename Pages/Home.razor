@@ -1,0 +1,796 @@
+@page "/"
+@implements IAsyncDisposable
+@using System.Globalization
+@using System.Net.Http.Json
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@inject HttpClient Http
+
+<PageTitle>Home</PageTitle>
+
+<section class="navbar-shell">
+    <nav class="site-navbar" aria-label="Primary">
+        <a class="brand" href="/" aria-label="Halka home">
+            <img src="logo.png" alt="Halka logo" class="brand-logo" />
+        </a>
+
+        <div class="nav-group">
+            <a href="/" class="nav-item active">Home</a>
+            <a href="/" class="nav-item">General Election 2024</a>
+            <a href="/" class="nav-item">Halka for</a>
+            <a href="/" class="nav-item">Features</a>
+            <a href="/" class="nav-item">About</a>
+            <a href="/" class="nav-item">Contact</a>
+            <a href="/" class="login-button">Login</a>
+        </div>
+    </nav>
+
+    <section class="slider-section" aria-label="Image slider">
+        @if (isLoading)
+        {
+            <div class="slider-state">Loading slider images...</div>
+        }
+        else if (!string.IsNullOrWhiteSpace(loadError))
+        {
+            <div class="slider-state slider-state-error">@loadError</div>
+        }
+        else if (slides.Count > 0)
+        {
+            var currentSlide = slides[activeIndex];
+
+            <div class="slider-card">
+                <button type="button" class="slider-arrow slider-arrow-left" @onclick="ShowPrevious" aria-label="Previous slide">
+                    &#8249;
+                </button>
+
+                <div class="slider-frame">
+                    <img src="@currentSlide.ImagePath" alt="@currentSlide.FileTitle" class="slider-image" />
+                </div>
+
+                <button type="button" class="slider-arrow slider-arrow-right" @onclick="ShowNext" aria-label="Next slide">
+                    &#8250;
+                </button>
+            </div>
+
+            <div class="slider-dots" aria-label="Slider navigation">
+                @for (var index = 0; index < slides.Count; index++)
+                {
+                    var isActive = index == activeIndex;
+
+                    <button type="button"
+                            class="slider-dot @(isActive ? "active" : null)"
+                            @onclick="@(() => ShowSlide(index))"
+                            aria-label="@($"Show slide {index + 1}")"
+                            aria-pressed="@isActive"></button>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="slider-state">No slider images found.</div>
+        }
+    </section>
+
+    <section class="insights-section" aria-label="Surveys and timeline">
+        <div class="insights-grid">
+            <div class="surveys-panel">
+                <div class="section-heading">
+                    <span class="section-kicker">Latest Reports</span>
+                    <h2>SURVEYS</h2>
+                </div>
+
+                @if (isSurveyLoading)
+                {
+                    <div class="content-state">Loading surveys...</div>
+                }
+                else if (!string.IsNullOrWhiteSpace(surveyLoadError))
+                {
+                    <div class="content-state content-state-error">@surveyLoadError</div>
+                }
+                else if (surveyReports.Count == 0)
+                {
+                    <div class="content-state">No surveys found.</div>
+                }
+                else
+                {
+                    <div class="survey-cards">
+                        @foreach (var report in surveyReports.Take(2))
+                        {
+                            <article class="survey-card">
+                                <div class="survey-chart">
+                                    @if (TryBuildChart(report, out var chart))
+                                    {
+                                        <div class="chart-legend" aria-hidden="true">
+                                            @foreach (var segment in chart.Segments)
+                                            {
+                                                <span class="legend-item">
+                                                    <span class="legend-swatch" style="@($"background:{segment.Color}")"></span>
+                                                    @segment.Label
+                                                </span>
+                                            }
+                                        </div>
+
+                                        <div class="donut-chart" style="@BuildChartStyle(chart)" role="img" aria-label="@chart.AriaLabel"></div>
+                                    }
+                                    else
+                                    {
+                                        <div class="chart-empty">No chart data</div>
+                                    }
+                                </div>
+
+                                <div class="survey-copy">
+                                    <h3>@GetSurveyTitle(report)</h3>
+                                    <p>@GetSurveySummary(report)</p>
+                                    <div class="survey-meta">
+                                        <span>@FormatDate(report.CreatedAt)</span>
+                                        @if (!string.IsNullOrWhiteSpace(report.AddedBy))
+                                        {
+                                            <span>@report.AddedBy</span>
+                                        }
+                                    </div>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                }
+            </div>
+
+            <aside class="timeline-panel">
+                <div class="section-heading">
+                    <span class="section-kicker">Recent Activity</span>
+                    <h2>TIMELINE</h2>
+                </div>
+
+                @if (isSurveyLoading)
+                {
+                    <div class="content-state">Loading timeline...</div>
+                }
+                else if (!string.IsNullOrWhiteSpace(surveyLoadError))
+                {
+                    <div class="content-state content-state-error">@surveyLoadError</div>
+                }
+                else if (surveyReports.Count == 0)
+                {
+                    <div class="content-state">No timeline entries found.</div>
+                }
+                else
+                {
+                    <div class="timeline-list">
+                        @foreach (var report in surveyReports.Take(8))
+                        {
+                            <article class="timeline-item">
+                                <div class="timeline-avatar-shell">
+                                    @if (!string.IsNullOrWhiteSpace(report.AddedImage))
+                                    {
+                                        <img class="timeline-avatar" src="@report.AddedImage" alt="@report.AddedBy" />
+                                    }
+                                    else
+                                    {
+                                        <div class="timeline-avatar timeline-avatar-fallback">@GetInitials(report.AddedBy, GetSurveyTitle(report))</div>
+                                    }
+                                </div>
+
+                                <div class="timeline-copy">
+                                    <h3>@BuildTimelineTitle(report)</h3>
+                                    <p>@GetTimelineSummary(report)</p>
+                                    <span class="timeline-date">@FormatDate(report.CreatedAt)</span>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                }
+            </aside>
+        </div>
+    </section>
+
+    <section class="complaints-section" aria-label="Complaints">
+        <div class="complaints-panel">
+            <div class="section-heading">
+                <span class="section-kicker">Public Issues</span>
+                <h2>COMPLAINTS</h2>
+            </div>
+
+            @if (isComplaintLoading)
+            {
+                <div class="content-state">Loading complaints...</div>
+            }
+            else if (!string.IsNullOrWhiteSpace(complaintLoadError))
+            {
+                <div class="content-state content-state-error">@complaintLoadError</div>
+            }
+            else if (complaints.Count == 0)
+            {
+                <div class="content-state">No complaints found.</div>
+            }
+            else
+            {
+                <div class="complaint-cards">
+                    @foreach (var complaint in PagedComplaints)
+                    {
+                        <article class="complaint-card">
+                            @if (!string.IsNullOrWhiteSpace(GetComplaintImage(complaint)))
+                            {
+                                <img class="complaint-media" src="@GetComplaintImage(complaint)" alt="@GetComplaintTitle(complaint)" />
+                            }
+                            else
+                            {
+                                <div class="complaint-media complaint-media-fallback">
+                                    <span>@GetComplaintTypeAbbreviation(complaint.TypeName)</span>
+                                </div>
+                            }
+
+                            <div class="complaint-copy">
+                                <h3>@GetComplaintTitle(complaint)</h3>
+                                <p>@GetComplaintSummary(complaint)</p>
+                                <div class="complaint-meta">
+                                    <span>@FormatDate(complaint.CreatedAt)</span>
+                                    <span>@GetComplaintLocation(complaint)</span>
+                                </div>
+                            </div>
+                        </article>
+                    }
+                </div>
+
+                @if (ComplaintPageCount > 1)
+                {
+                    <nav class="pagination-nav" aria-label="Complaint pages">
+                        <button type="button"
+                                class="pagination-link"
+                                @onclick="ShowPreviousComplaintPage"
+                                disabled="@(complaintCurrentPage == 1)">
+                            Previous
+                        </button>
+
+                        @for (var page = 1; page <= ComplaintPageCount; page++)
+                        {
+                            var pageNumber = page;
+
+                            <button type="button"
+                                    class="pagination-link @(pageNumber == complaintCurrentPage ? "active" : null)"
+                                    @onclick="@(() => ShowComplaintPage(pageNumber))"
+                                    aria-current="@(pageNumber == complaintCurrentPage ? "page" : null)">
+                                @pageNumber
+                            </button>
+                        }
+
+                        <button type="button"
+                                class="pagination-link"
+                                @onclick="ShowNextComplaintPage"
+                                disabled="@(complaintCurrentPage == ComplaintPageCount)">
+                            Next
+                        </button>
+                    </nav>
+                }
+            }
+        </div>
+    </section>
+</section>
+
+@code {
+    private const string SliderApiUrl = "https://campaigner.syntracx.com/api/list/web/sliders";
+    private const string SurveyApiUrl = "https://campaigner.syntracx.com/api/list/survey/manual/report";
+    private const string ComplaintApiUrl = "https://campaigner.syntracx.com/api/list/web/complaints";
+    private const int ComplaintPageSize = 6;
+    private readonly JsonSerializerOptions jsonOptions = new() { PropertyNameCaseInsensitive = true };
+    private readonly CancellationTokenSource sliderLoopCts = new();
+
+    private List<SliderItem> slides = [];
+    private List<SurveyReport> surveyReports = [];
+    private List<ComplaintItem> complaints = [];
+    private bool isLoading = true;
+    private bool isSurveyLoading = true;
+    private bool isComplaintLoading = true;
+    private string? loadError;
+    private string? surveyLoadError;
+    private string? complaintLoadError;
+    private int activeIndex;
+    private int complaintCurrentPage = 1;
+    private Task? sliderLoopTask;
+
+    private IEnumerable<ComplaintItem> PagedComplaints =>
+        complaints
+            .Skip((complaintCurrentPage - 1) * ComplaintPageSize)
+            .Take(ComplaintPageSize);
+
+    private int ComplaintPageCount =>
+        Math.Max(1, (int)Math.Ceiling(complaints.Count / (double)ComplaintPageSize));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadSlidesAsync(), LoadSurveyReportsAsync(), LoadComplaintsAsync());
+
+        if (slides.Count > 1)
+        {
+            sliderLoopTask = RunSliderLoopAsync(sliderLoopCts.Token);
+        }
+    }
+
+    private async Task LoadSlidesAsync()
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, SliderApiUrl)
+            {
+                Content = new FormUrlEncodedContent(
+                [
+                    new KeyValuePair<string, string>("slider_type", "1")
+                ])
+            };
+
+            using var response = await Http.SendAsync(request, sliderLoopCts.Token);
+            response.EnsureSuccessStatusCode();
+
+            await using var stream = await response.Content.ReadAsStreamAsync(sliderLoopCts.Token);
+            var payload = await JsonSerializer.DeserializeAsync<SliderApiResponse>(stream, jsonOptions, sliderLoopCts.Token);
+
+            if (payload?.Rescode != 1 || payload.Data is null || payload.Data.Count == 0)
+            {
+                loadError = payload?.Message ?? "Unable to load slider data.";
+                return;
+            }
+
+            slides = payload.Data
+                .Where(slide => !string.IsNullOrWhiteSpace(slide.ImagePath))
+                .ToList();
+
+            if (slides.Count == 0)
+            {
+                loadError = "Slider images are missing from the API response.";
+            }
+        }
+        catch (Exception ex)
+        {
+            loadError = $"Failed to load slider images. {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadSurveyReportsAsync()
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, SurveyApiUrl)
+            {
+                Content = JsonContent.Create(new { })
+            };
+
+            using var response = await Http.SendAsync(request, sliderLoopCts.Token);
+            response.EnsureSuccessStatusCode();
+
+            await using var stream = await response.Content.ReadAsStreamAsync(sliderLoopCts.Token);
+            var payload = await JsonSerializer.DeserializeAsync<SurveyApiResponse>(stream, jsonOptions, sliderLoopCts.Token);
+
+            if (payload?.Rescode != 1 || payload.Data is null)
+            {
+                surveyLoadError = payload?.Message ?? "Unable to load survey reports.";
+                return;
+            }
+
+            surveyReports = payload.Data
+                .OrderByDescending(report => report.CreatedAt ?? DateTime.MinValue)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            surveyLoadError = $"Failed to load survey reports. {ex.Message}";
+        }
+        finally
+        {
+            isSurveyLoading = false;
+        }
+    }
+
+    private async Task LoadComplaintsAsync()
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, ComplaintApiUrl)
+            {
+                Content = JsonContent.Create(new { })
+            };
+
+            using var response = await Http.SendAsync(request, sliderLoopCts.Token);
+            response.EnsureSuccessStatusCode();
+
+            await using var stream = await response.Content.ReadAsStreamAsync(sliderLoopCts.Token);
+            var payload = await JsonSerializer.DeserializeAsync<ComplaintApiResponse>(stream, jsonOptions, sliderLoopCts.Token);
+
+            if (payload?.Rescode != 1 || payload.Data is null)
+            {
+                complaintLoadError = payload?.Message ?? "Unable to load complaints.";
+                return;
+            }
+
+            complaints = payload.Data
+                .OrderByDescending(complaint => complaint.CreatedAt ?? DateTime.MinValue)
+                .ToList();
+
+            complaintCurrentPage = 1;
+        }
+        catch (Exception ex)
+        {
+            complaintLoadError = $"Failed to load complaints. {ex.Message}";
+        }
+        finally
+        {
+            isComplaintLoading = false;
+        }
+    }
+
+    private async Task RunSliderLoopAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                await InvokeAsync(() =>
+                {
+                    ShowNext();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void ShowPrevious()
+    {
+        if (slides.Count == 0)
+        {
+            return;
+        }
+
+        activeIndex = (activeIndex - 1 + slides.Count) % slides.Count;
+    }
+
+    private void ShowNext()
+    {
+        if (slides.Count == 0)
+        {
+            return;
+        }
+
+        activeIndex = (activeIndex + 1) % slides.Count;
+    }
+
+    private void ShowSlide(int index)
+    {
+        if (index < 0 || index >= slides.Count)
+        {
+            return;
+        }
+
+        activeIndex = index;
+    }
+
+    private void ShowComplaintPage(int page)
+    {
+        if (page < 1 || page > ComplaintPageCount)
+        {
+            return;
+        }
+
+        complaintCurrentPage = page;
+    }
+
+    private void ShowPreviousComplaintPage() => ShowComplaintPage(complaintCurrentPage - 1);
+
+    private void ShowNextComplaintPage() => ShowComplaintPage(complaintCurrentPage + 1);
+
+    private static string GetSurveyTitle(SurveyReport report) =>
+        FirstNonEmpty(report.ReportTitle, report.SurveyTitle, report.ReportDescription, "Survey");
+
+    private static string GetSurveySummary(SurveyReport report)
+    {
+        var summary = FirstNonEmpty(report.ReportDetail, report.SurveyDescription, report.ReportDescription, "No survey description available.");
+        return summary.Length <= 160 ? summary : $"{summary[..157]}...";
+    }
+
+    private static string BuildTimelineTitle(SurveyReport report)
+    {
+        var actor = FirstNonEmpty(report.AddedBy, "Team");
+        return $"{actor} added {GetSurveyTitle(report)}";
+    }
+
+    private static string GetTimelineSummary(SurveyReport report) =>
+        FirstNonEmpty(report.ReportDescription, report.SurveyDescription, "Survey activity recorded.");
+
+    private static string GetComplaintTitle(ComplaintItem complaint) =>
+        FirstNonEmpty(complaint.TypeName, "Complaint");
+
+    private static string GetComplaintSummary(ComplaintItem complaint)
+    {
+        var summary = FirstNonEmpty(complaint.Details, "No complaint details available.");
+        return summary.Length <= 115 ? summary : $"{summary[..112]}...";
+    }
+
+    private static string GetComplaintLocation(ComplaintItem complaint) =>
+        FirstNonEmpty(complaint.District, complaint.Province, complaint.LocationDescription, "Unknown area");
+
+    private static string? GetComplaintImage(ComplaintItem complaint) =>
+        FirstNonEmpty(
+            complaint.Media.FirstOrDefault(media => !string.IsNullOrWhiteSpace(media.MediaPath))?.MediaPath,
+            complaint.File);
+
+    private static string GetComplaintTypeAbbreviation(string? typeName)
+    {
+        var source = FirstNonEmpty(typeName, "Complaint");
+        var parts = source
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Take(2)
+            .Select(part => char.ToUpperInvariant(part[0]));
+
+        return string.Concat(parts);
+    }
+
+    private static string FormatDate(DateTime? value) =>
+        value?.ToString("MMM d, yyyy", CultureInfo.InvariantCulture) ?? "Unknown date";
+
+    private static string GetInitials(string? primary, string fallback)
+    {
+        var source = FirstNonEmpty(primary, fallback);
+        var initials = source
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Take(2)
+            .Select(part => char.ToUpperInvariant(part[0]));
+
+        return string.Concat(initials);
+    }
+
+    private static bool TryBuildChart(SurveyReport report, out SurveyChartModel chart)
+    {
+        chart = new SurveyChartModel();
+
+        var stats = report.Questions
+            ?.Select(question => question.ResponseStats)
+            .FirstOrDefault(response => response is not null);
+
+        if (stats is null)
+        {
+            return false;
+        }
+
+        var segments = new List<ChartSegment>();
+        var palette = new[] { "#a7ad8c", "#08b06f", "#5f8d51", "#d4a017", "#1f6f50", "#8e9aaf" };
+
+        if (stats.Values.Count > 0 && stats.Labels.Count == stats.Values.Count)
+        {
+            for (var index = 0; index < stats.Values.Count; index++)
+            {
+                if (stats.Values[index] <= 0)
+                {
+                    continue;
+                }
+
+                segments.Add(new ChartSegment(stats.Labels[index], stats.Values[index], palette[index % palette.Length]));
+            }
+        }
+        else
+        {
+            if (stats.YesCount > 0)
+            {
+                segments.Add(new ChartSegment("Yes", stats.YesCount, palette[0]));
+            }
+
+            if (stats.NoCount > 0)
+            {
+                segments.Add(new ChartSegment("No", stats.NoCount, palette[1]));
+            }
+        }
+
+        if (segments.Count == 0)
+        {
+            return false;
+        }
+
+        chart = new SurveyChartModel
+        {
+            Segments = segments,
+            AriaLabel = $"{stats.QuestionTitle}: {string.Join(", ", segments.Select(segment => $"{segment.Label} {segment.Value}"))}"
+        };
+
+        return true;
+    }
+
+    private static string BuildChartStyle(SurveyChartModel chart)
+    {
+        var total = chart.Segments.Sum(segment => segment.Value);
+        var start = 0d;
+        var stops = new List<string>();
+
+        foreach (var segment in chart.Segments)
+        {
+            var end = start + (segment.Value / total * 100d);
+            stops.Add($"{segment.Color} {start.ToString("0.##", CultureInfo.InvariantCulture)}% {end.ToString("0.##", CultureInfo.InvariantCulture)}%");
+            start = end;
+        }
+
+        return $"background: conic-gradient({string.Join(", ", stops)});";
+    }
+
+    private static string FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
+
+    public async ValueTask DisposeAsync()
+    {
+        sliderLoopCts.Cancel();
+
+        if (sliderLoopTask is not null)
+        {
+            try
+            {
+                await sliderLoopTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        sliderLoopCts.Dispose();
+    }
+
+    private sealed class SliderApiResponse
+    {
+        [JsonPropertyName("rescode")]
+        public int Rescode { get; set; }
+
+        [JsonPropertyName("message")]
+        public string? Message { get; set; }
+
+        [JsonPropertyName("data")]
+        public List<SliderItem>? Data { get; set; }
+    }
+
+    private sealed class SurveyApiResponse
+    {
+        [JsonPropertyName("rescode")]
+        public int Rescode { get; set; }
+
+        [JsonPropertyName("message")]
+        public string? Message { get; set; }
+
+        [JsonPropertyName("data")]
+        public List<SurveyReport>? Data { get; set; }
+    }
+
+    private sealed class ComplaintApiResponse
+    {
+        [JsonPropertyName("rescode")]
+        public int Rescode { get; set; }
+
+        [JsonPropertyName("message")]
+        public string? Message { get; set; }
+
+        [JsonPropertyName("data")]
+        public List<ComplaintItem>? Data { get; set; }
+    }
+
+    private sealed class SliderItem
+    {
+        [JsonPropertyName("file_title")]
+        public string FileTitle { get; set; } = "Halka";
+
+        [JsonPropertyName("file_desc")]
+        public string FileDescription { get; set; } = string.Empty;
+
+        [JsonPropertyName("image_path")]
+        public string ImagePath { get; set; } = string.Empty;
+    }
+
+    private sealed class SurveyReport
+    {
+        [JsonPropertyName("report_title")]
+        public string? ReportTitle { get; set; }
+
+        [JsonPropertyName("report_desc")]
+        public string? ReportDescription { get; set; }
+
+        [JsonPropertyName("report_detail")]
+        public string? ReportDetail { get; set; }
+
+        [JsonPropertyName("sdt")]
+        public string? CreatedAtRaw { get; set; }
+
+        [JsonPropertyName("survey_title")]
+        public string? SurveyTitle { get; set; }
+
+        [JsonPropertyName("survey_description")]
+        public string? SurveyDescription { get; set; }
+
+        [JsonPropertyName("added_by")]
+        public string? AddedBy { get; set; }
+
+        [JsonPropertyName("added_image")]
+        public string? AddedImage { get; set; }
+
+        [JsonPropertyName("questions")]
+        public List<SurveyQuestion> Questions { get; set; } = [];
+
+        [JsonIgnore]
+        public DateTime? CreatedAt =>
+            DateTime.TryParseExact(CreatedAtRaw, "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
+                ? parsed
+                : null;
+    }
+
+    private sealed class SurveyQuestion
+    {
+        [JsonPropertyName("reponse_stats")]
+        public SurveyResponseStats? ResponseStats { get; set; }
+    }
+
+    private sealed class SurveyResponseStats
+    {
+        [JsonPropertyName("question_title")]
+        public string QuestionTitle { get; set; } = string.Empty;
+
+        [JsonPropertyName("labels")]
+        public List<string> Labels { get; set; } = [];
+
+        [JsonPropertyName("values")]
+        public List<int> Values { get; set; } = [];
+
+        [JsonPropertyName("yes_count")]
+        public int YesCount { get; set; }
+
+        [JsonPropertyName("no_count")]
+        public int NoCount { get; set; }
+    }
+
+    private sealed class SurveyChartModel
+    {
+        public List<ChartSegment> Segments { get; set; } = [];
+        public string AriaLabel { get; set; } = string.Empty;
+    }
+
+    private sealed class ComplaintItem
+    {
+        [JsonPropertyName("complaint_id")]
+        public string? ComplaintId { get; set; }
+
+        [JsonPropertyName("type_name")]
+        public string? TypeName { get; set; }
+
+        [JsonPropertyName("details")]
+        public string? Details { get; set; }
+
+        [JsonPropertyName("file")]
+        public string? File { get; set; }
+
+        [JsonPropertyName("loc_desc")]
+        public string? LocationDescription { get; set; }
+
+        [JsonPropertyName("province")]
+        public string? Province { get; set; }
+
+        [JsonPropertyName("district")]
+        public string? District { get; set; }
+
+        [JsonPropertyName("sdt")]
+        public string? CreatedAtRaw { get; set; }
+
+        [JsonPropertyName("media")]
+        public List<ComplaintMedia> Media { get; set; } = [];
+
+        [JsonIgnore]
+        public DateTime? CreatedAt =>
+            DateTime.TryParseExact(CreatedAtRaw, "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
+                ? parsed
+                : null;
+    }
+
+    private sealed class ComplaintMedia
+    {
+        [JsonPropertyName("media_path")]
+        public string? MediaPath { get; set; }
+    }
+
+    private sealed record ChartSegment(string Label, double Value, string Color);
+}
