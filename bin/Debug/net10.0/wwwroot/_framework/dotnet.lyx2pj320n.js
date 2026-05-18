@@ -5,7 +5,7 @@ var e=!1;const t=async()=>WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,
   "mainAssemblyName": "halka.pk",
   "applicationEnvironment": "Development",
   "resources": {
-    "hash": "sha256-yI32UuGa7/q4mwCe3sumW3xOW7KRIbZbdqVf682TRiw=",
+    "hash": "sha256-PUDckGB+nDO2Uwsm3V1U0f/vmd4MAXsO/eq2tYAwl9Y=",
     "jsModuleNative": [
       {
         "name": "dotnet.native.rjbmzc4jpg.js"
@@ -1242,16 +1242,16 @@ var e=!1;const t=async()=>WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,
       },
       {
         "virtualPath": "halka.pk.wasm",
-        "name": "halka.pk.zomw6mbxx9.wasm",
-        "hash": "sha256-HfcTcHRmxtmWkRddQhEus70kgrCG/fPWFbB4cmaNqDw=",
+        "name": "halka.pk.2j69orb0b1.wasm",
+        "hash": "sha256-smLeqtnSRQjhy8Hh97+GkKKj5iQNo0kh7vN9SxCwPS0=",
         "cache": "force-cache"
       }
     ],
     "pdb": [
       {
         "virtualPath": "halka.pk.pdb",
-        "name": "halka.pk.8r93p6v5lg.pdb",
-        "hash": "sha256-3OotSs/XlxrqkmR2P0RyoYJczN81q9hncOJl2TH2ar4=",
+        "name": "halka.pk.zojd2wiyuo.pdb",
+        "hash": "sha256-Dfms8HzTufbj7H4/9P3rhe5hxClpyzWqkE58Dzocm9c=",
         "cache": "force-cache"
       }
     ],

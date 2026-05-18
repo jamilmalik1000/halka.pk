@@ -8,6 +8,8 @@
 
 <PageTitle>Home</PageTitle>
 
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+
 <section class="navbar-shell">
     <nav class="site-navbar" aria-label="Primary">
         <a class="brand" href="/" aria-label="Halka home">
@@ -25,6 +27,7 @@
         </div>
     </nav>
 
+    <div class="page-content">
     <section class="slider-section" aria-label="Image slider">
         @if (isLoading)
         {
@@ -182,7 +185,6 @@
             </aside>
         </div>
     </section>
-
     <section class="complaints-section" aria-label="Complaints">
         <div class="complaints-panel">
             <div class="section-heading">
@@ -215,7 +217,8 @@
                             else
                             {
                                 <div class="complaint-media complaint-media-fallback">
-                                    <span>@GetComplaintTypeAbbreviation(complaint.TypeName)</span>
+                                    <span class="material-symbols-outlined complaint-type-icon">@GetComplaintTypeIcon(complaint.TypeName)</span>
+                                    <span class="complaint-type-label">@GetComplaintTitle(complaint)</span>
                                 </div>
                             }
 
@@ -264,12 +267,112 @@
             }
         </div>
     </section>
+
+    <section class="news-section" aria-label="News">
+        <div class="news-panel">
+            <div class="section-heading">
+                <span class="section-kicker">Latest Updates</span>
+                <h2>NEWS</h2>
+            </div>
+
+            @if (isNewsLoading)
+            {
+                <div class="content-state">Loading news...</div>
+            }
+            else if (!string.IsNullOrWhiteSpace(newsLoadError))
+            {
+                <div class="content-state content-state-error">@newsLoadError</div>
+            }
+            else if (newsItems.Count == 0)
+            {
+                <div class="content-state">No news found.</div>
+            }
+            else
+            {
+                var featured = newsItems[0];
+                var sideItems = newsItems.Skip(1).Take(5).ToList();
+
+                <div class="news-grid">
+                    <article class="news-featured">
+                        @if (!string.IsNullOrWhiteSpace(GetNewsImage(featured)))
+                        {
+                            <img class="news-featured-image" src="@GetNewsImage(featured)" alt="@featured.Title" />
+                        }
+                        else
+                        {
+                            <div class="news-featured-image news-image-fallback">
+                                <span class="material-symbols-outlined" style="font-size:3.5rem;color:#0d663f">newspaper</span>
+                            </div>
+                        }
+                        <div class="news-featured-copy">
+                            <h3>@featured.Title</h3>
+                            <div class="news-meta">
+                                <span>@FormatDate(featured.PublishedAt)</span>
+                                @if (!string.IsNullOrWhiteSpace(featured.Source))
+                                {
+                                    <span>Source:
+                                        @if (!string.IsNullOrWhiteSpace(featured.SourceUrl))
+                                        {
+                                            <a href="@featured.SourceUrl" target="_blank" rel="noopener noreferrer" class="news-source-link">@featured.Source</a>
+                                        }
+                                        else
+                                        {
+                                            @featured.Source
+                                        }
+                                    </span>
+                                }
+                            </div>
+                        </div>
+                    </article>
+
+                    <div class="news-sidebar">
+                        @foreach (var item in sideItems)
+                        {
+                            <article class="news-side-card">
+                                @if (!string.IsNullOrWhiteSpace(GetNewsImage(item)))
+                                {
+                                    <img class="news-side-image" src="@GetNewsImage(item)" alt="@item.Title" />
+                                }
+                                else
+                                {
+                                    <div class="news-side-image news-image-fallback">
+                                        <span class="material-symbols-outlined" style="font-size:1.6rem;color:#0d663f">newspaper</span>
+                                    </div>
+                                }
+                                <div class="news-side-copy">
+                                    <h4>@item.Title</h4>
+                                    <div class="news-meta">
+                                        <span>@FormatDate(item.PublishedAt)</span>
+                                        @if (!string.IsNullOrWhiteSpace(item.Source))
+                                        {
+                                            @if (!string.IsNullOrWhiteSpace(item.SourceUrl))
+                                            {
+                                                <a href="@item.SourceUrl" target="_blank" rel="noopener noreferrer" class="news-source-link">@item.Source</a>
+                                            }
+                                            else
+                                            {
+                                                <span>@item.Source</span>
+                                            }
+                                        }
+                                    </div>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </section>
+
+    </div>
 </section>
 
 @code {
     private const string SliderApiUrl = "https://campaigner.syntracx.com/api/list/web/sliders";
     private const string SurveyApiUrl = "https://campaigner.syntracx.com/api/list/survey/manual/report";
     private const string ComplaintApiUrl = "https://campaigner.syntracx.com/api/list/web/complaints";
+    private const string NewsApiUrl = "https://campaigner.syntracx.com/api/list/web/news";
+    private const string MediaBaseUrl = "https://campaigner.syntracx.com/";
     private const int ComplaintPageSize = 6;
     private readonly JsonSerializerOptions jsonOptions = new() { PropertyNameCaseInsensitive = true };
     private readonly CancellationTokenSource sliderLoopCts = new();
@@ -277,12 +380,15 @@
     private List<SliderItem> slides = [];
     private List<SurveyReport> surveyReports = [];
     private List<ComplaintItem> complaints = [];
+    private List<NewsItem> newsItems = [];
     private bool isLoading = true;
     private bool isSurveyLoading = true;
     private bool isComplaintLoading = true;
+    private bool isNewsLoading = true;
     private string? loadError;
     private string? surveyLoadError;
     private string? complaintLoadError;
+    private string? newsLoadError;
     private int activeIndex;
     private int complaintCurrentPage = 1;
     private Task? sliderLoopTask;
@@ -297,7 +403,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await Task.WhenAll(LoadSlidesAsync(), LoadSurveyReportsAsync(), LoadComplaintsAsync());
+        await Task.WhenAll(LoadSlidesAsync(), LoadSurveyReportsAsync(), LoadComplaintsAsync(), LoadNewsAsync());
 
         if (slides.Count > 1)
         {
@@ -420,6 +526,44 @@
         }
     }
 
+    private async Task LoadNewsAsync()
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, NewsApiUrl)
+            {
+                Content = JsonContent.Create(new { })
+            };
+
+            using var response = await Http.SendAsync(request, sliderLoopCts.Token);
+            response.EnsureSuccessStatusCode();
+
+            await using var stream = await response.Content.ReadAsStreamAsync(sliderLoopCts.Token);
+            var payload = await JsonSerializer.DeserializeAsync<NewsApiResponse>(stream, jsonOptions, sliderLoopCts.Token);
+
+            if (payload?.Rescode != 1 || payload.Data is null)
+            {
+                newsLoadError = payload?.Message ?? "Unable to load news.";
+                return;
+            }
+
+            newsItems = payload.Data
+                .OrderByDescending(n => n.PublishedAt ?? DateTime.MinValue)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            newsLoadError = $"Failed to load news. {ex.Message}";
+        }
+        finally
+        {
+            isNewsLoading = false;
+        }
+    }
+
+    private static string? GetNewsImage(NewsItem item) =>
+        item.Media.FirstOrDefault(m => !string.IsNullOrWhiteSpace(m.MediaPath))?.MediaPath;
+
     private async Task RunSliderLoopAsync(CancellationToken cancellationToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
@@ -514,20 +658,46 @@
     private static string GetComplaintLocation(ComplaintItem complaint) =>
         FirstNonEmpty(complaint.District, complaint.Province, complaint.LocationDescription, "Unknown area");
 
-    private static string? GetComplaintImage(ComplaintItem complaint) =>
-        FirstNonEmpty(
+    private static string? GetComplaintImage(ComplaintItem complaint)
+    {
+        var path = FirstNonEmpty(
             complaint.Media.FirstOrDefault(media => !string.IsNullOrWhiteSpace(media.MediaPath))?.MediaPath,
             complaint.File);
 
-    private static string GetComplaintTypeAbbreviation(string? typeName)
-    {
-        var source = FirstNonEmpty(typeName, "Complaint");
-        var parts = source
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Take(2)
-            .Select(part => char.ToUpperInvariant(part[0]));
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        return path.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? path : $"{MediaBaseUrl}{path.TrimStart('/')}";
+    }
 
-        return string.Concat(parts);
+    private static string GetComplaintTypeIcon(string? typeName)
+    {
+        var name = FirstNonEmpty(typeName, string.Empty).ToLowerInvariant();
+
+        if (name.Contains("road") || name.Contains("maintenance") || name.Contains("pavement") || name.Contains("pothole"))
+            return "construction";
+        if (name.Contains("water") || name.Contains("sewage") || name.Contains("drain") || name.Contains("flood"))
+            return "water_damage";
+        if (name.Contains("electric") || name.Contains("power") || name.Contains("light") || name.Contains("street light"))
+            return "electric_bolt";
+        if (name.Contains("garbage") || name.Contains("waste") || name.Contains("sanit") || name.Contains("trash"))
+            return "delete";
+        if (name.Contains("park") || name.Contains("garden") || name.Contains("green"))
+            return "park";
+        if (name.Contains("health") || name.Contains("hospital") || name.Contains("medical"))
+            return "local_hospital";
+        if (name.Contains("education") || name.Contains("school") || name.Contains("college"))
+            return "school";
+        if (name.Contains("transport") || name.Contains("bus") || name.Contains("traffic"))
+            return "directions_bus";
+        if (name.Contains("gas") || name.Contains("fuel"))
+            return "local_gas_station";
+        if (name.Contains("security") || name.Contains("crime") || name.Contains("police") || name.Contains("safety"))
+            return "local_police";
+        if (name.Contains("noise") || name.Contains("pollution"))
+            return "volume_up";
+        if (name.Contains("building") || name.Contains("construct") || name.Contains("infrastructure"))
+            return "apartment";
+
+        return "report_problem";
     }
 
     private static string FormatDate(DateTime? value) =>
@@ -748,6 +918,51 @@
     {
         public List<ChartSegment> Segments { get; set; } = [];
         public string AriaLabel { get; set; } = string.Empty;
+    }
+
+    private sealed class NewsApiResponse
+    {
+        [JsonPropertyName("rescode")]
+        public int Rescode { get; set; }
+
+        [JsonPropertyName("message")]
+        public string? Message { get; set; }
+
+        [JsonPropertyName("data")]
+        public List<NewsItem>? Data { get; set; }
+    }
+
+    private sealed class NewsItem
+    {
+        [JsonPropertyName("news_id")]
+        public string? NewsId { get; set; }
+
+        [JsonPropertyName("nw_title")]
+        public string? Title { get; set; }
+
+        [JsonPropertyName("nw_source")]
+        public string? Source { get; set; }
+
+        [JsonPropertyName("nw_source_url")]
+        public string? SourceUrl { get; set; }
+
+        [JsonPropertyName("nw_sdt")]
+        public string? PublishedAtRaw { get; set; }
+
+        [JsonPropertyName("nw_media")]
+        public List<NewsMedia> Media { get; set; } = [];
+
+        [JsonIgnore]
+        public DateTime? PublishedAt =>
+            DateTime.TryParseExact(PublishedAtRaw, "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
+                ? parsed
+                : null;
+    }
+
+    private sealed class NewsMedia
+    {
+        [JsonPropertyName("media_path")]
+        public string? MediaPath { get; set; }
     }
 
     private sealed class ComplaintItem

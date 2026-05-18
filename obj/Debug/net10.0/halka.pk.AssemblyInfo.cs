@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("halka.pk")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0ddddae0d2f8b343ac48da574c2708daad393f3f")]
 [assembly: System.Reflection.AssemblyProductAttribute("halka.pk")]
 [assembly: System.Reflection.AssemblyTitleAttribute("halka.pk")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
